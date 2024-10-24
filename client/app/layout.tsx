@@ -1,7 +1,6 @@
 'use client';
 import type { Metadata } from 'next';
 import { SessionProvider } from 'next-auth/react';
-import { Session } from 'next-auth';
 import localFont from 'next/font/local';
 import { Inter } from 'next/font/google';
 import './globals.css';
@@ -25,16 +24,14 @@ const metadata: Metadata = {
 };
 
 export default function RootLayout({
-  children,
-  session
+  children
 }: {
   children: React.ReactNode;
-  session: Session | null;
 }) {
   return (
     <html lang='en'>
       <body className={inter.className}>
-        <SessionProvider session={session}>
+        <SessionProvider>
           <div className='min-h-screen bg-gray-50'>{children}</div>
         </SessionProvider>
       </body>

@@ -8,7 +8,7 @@ const handler = NextAuth({
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
       authorization: {
         params: {
-          // scope: 'https://www.googleapis.com/auth/youtube.readonly'
+          scope: 'https://www.googleapis.com/auth/youtube.readonly',
           prompt: 'consent',
           access_type: 'offline',
           response_type: 'code'
