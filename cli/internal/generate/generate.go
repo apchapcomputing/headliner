@@ -73,72 +73,135 @@ func (c *Client) GenerateTitles(ctx context.Context, input string, report *analy
 func buildSystemPrompt(r *analysis.PatternReport, opts Options) string {
 	var b strings.Builder
 
-	b.WriteString(`You are an expert YouTube title copywriter. You generate click-optimized YouTube titles 
-based on the proven patterns extracted from a creator's own liked and watched video library.
+	b.WriteString(`You are an expert YouTube title copywriter. You generate click-optimized YouTube titles
+based on patterns extracted from a creator's own liked and watched video library.
 Your titles must feel natural, authentic, and match the tone of content the user actually engages with.
 
 `)
 
-	// Inject pattern data
 	fmt.Fprintf(&b, "## Title Pattern Intelligence (from %d real titles this user watches)\n\n", r.TotalTitles)
 
+	// ── Length & word count ───────────────────────────────────────────────────
 	fmt.Fprintf(&b, "### Length Guidelines\n")
-	fmt.Fprintf(&b, "- Typical length: %d–%d characters (mean %.0f, median %d)\n",
-		r.LengthMin, r.LengthMax, r.LengthMean, r.LengthP50)
-	fmt.Fprintf(&b, "- Typical word count: median %d words\n\n", r.WordCountP50)
+	fmt.Fprintf(&b, "- Target %d–%d characters (mean %.0f, median %d, P90 %d)\n",
+		r.LengthMin, r.LengthMax, r.LengthMean, r.LengthP50, r.LengthP90)
+	fmt.Fprintf(&b, "- Target ~%d words (median %d)\n\n", r.WordCountP50, r.WordCountP50)
 
-	fmt.Fprintf(&b, "### Structural Templates (most to least common in their watch history)\n")
+	// ── Structural templates ──────────────────────────────────────────────────
+	fmt.Fprintf(&b, "### Structural Templates (ranked by frequency in their watch history)\n")
+	fmt.Fprintf(&b, "Use these templates as inspiration — they are proven to resonate with this audience.\n")
 	for i, t := range r.Templates {
-		if i >= 8 {
+		if i >= 12 {
 			break
 		}
-		fmt.Fprintf(&b, "- **%s** (%.1f%% of titles) — pattern: `%s`\n", t.Name, t.Pct, t.Pattern)
-		if examples, ok := r.TemplateExamples[t.Name]; ok {
+		fmt.Fprintf(&b, "\n**%s** (%.1f%% of titles)\n", t.Name, t.Pct)
+		if examples, ok := r.TemplateExamples[t.Name]; ok && len(examples) > 0 {
 			for _, ex := range examples {
-				fmt.Fprintf(&b, "  - e.g. \"%s\"\n", ex)
+				fmt.Fprintf(&b, "  → \"%s\"\n", ex)
 			}
 		}
 	}
 	b.WriteString("\n")
 
-	fmt.Fprintf(&b, "### Formatting Signals\n")
-	if r.ColonUsagePct > 20 {
-		fmt.Fprintf(&b, "- Colons are common (%.0f%%) — consider \"Main Idea: Specific Detail\" format\n", r.ColonUsagePct)
-	}
-	if r.NumberInTitlePct > 20 {
-		fmt.Fprintf(&b, "- Numbers appear in %.0f%% of titles — numbered lists perform well\n", r.NumberInTitlePct)
-	}
-	if r.QuestionPct > 15 {
-		fmt.Fprintf(&b, "- Question titles appear in %.0f%% — questions drive curiosity\n", r.QuestionPct)
-	}
-	if r.BracketPct > 15 {
-		fmt.Fprintf(&b, "- Bracket qualifiers [like this] or (like this) appear in %.0f%%\n", r.BracketPct)
-	}
-	b.WriteString("\n")
-
-	if len(r.PowerWords) > 0 {
-		fmt.Fprintf(&b, "### High-Frequency Power Words\n")
-		words := make([]string, 0, 10)
-		for i, pw := range r.PowerWords {
-			if i >= 10 {
+	// ── Emotional triggers ────────────────────────────────────────────────────
+	if len(r.EmotionalTriggers) > 0 {
+		fmt.Fprintf(&b, "### Emotional Hooks (ranked by prevalence)\n")
+		fmt.Fprintf(&b, "These emotional angles appear most in titles the user clicks:\n")
+		for i, e := range r.EmotionalTriggers {
+			if i >= 5 {
 				break
 			}
-			words = append(words, pw.Text)
-		}
-		fmt.Fprintf(&b, "Use these sparingly and only when natural: %s\n\n", strings.Join(words, ", "))
-	}
-
-	if len(r.LeadPhrases) > 0 {
-		fmt.Fprintf(&b, "### Common Opening Phrases\n")
-		for i, lp := range r.LeadPhrases {
-			if i >= 6 {
-				break
-			}
-			fmt.Fprintf(&b, "- \"%s\"\n", lp.Text)
+			fmt.Fprintf(&b, "- **%s** (%.1f%%)\n", e.Text, e.Pct)
 		}
 		b.WriteString("\n")
 	}
 
+	// ── Curiosity gap patterns ────────────────────────────────────────────────
+	if len(r.CuriosityGaps) > 0 {
+		fmt.Fprintf(&b, "### Curiosity Gap Devices\n")
+		fmt.Fprintf(&b, "These patterns create information gaps that compel clicks:\n")
+		for i, c := range r.CuriosityGaps {
+			if i >= 6 || c.Count == 0 {
+				break
+			}
+			fmt.Fprintf(&b, "- %s (%.1f%%)\n", c.Text, c.Pct)
+		}
+		b.WriteString("\n")
+	}
+
+	// ── Formatting signals ────────────────────────────────────────────────────
+	fmt.Fprintf(&b, "### Formatting Signals\n")
+	fmt.Fprintf(&b, "- Positive framing (\"How to\", \"Build\", \"Best\"): %.0f%% of titles\n", r.PositiveFramingPct)
+	fmt.Fprintf(&b, "- Negative framing (\"Stop\", \"Don't\", \"Worst\"): %.0f%% of titles\n", r.NegativeFramingPct)
+	fmt.Fprintf(&b, "- Titles with numbers: %.0f%%\n", r.NumberInTitlePct)
+	fmt.Fprintf(&b, "- Titles with time reference (\"in 30 days\", \"5 hours\"): %.0f%%\n", r.HasTimePct)
+	fmt.Fprintf(&b, "- Titles with money/$ reference: %.0f%%\n", r.HasMoneyPct)
+	fmt.Fprintf(&b, "- Titles starting with a number (list format): %.0f%%\n", r.HasListNumPct)
+	if r.ColonUsagePct > 5 {
+		fmt.Fprintf(&b, "- Colon splits (\"Main Idea: Specific Detail\"): %.0f%%\n", r.ColonUsagePct)
+	}
+	if r.QuestionPct > 5 {
+		fmt.Fprintf(&b, "- Question titles: %.0f%%\n", r.QuestionPct)
+	}
+	if r.BracketPct > 5 {
+		fmt.Fprintf(&b, "- Bracket/paren qualifiers [like this]: %.0f%%\n", r.BracketPct)
+	}
+	if r.AllCapsWordsPct > 5 {
+		fmt.Fprintf(&b, "- Titles containing an ALL CAPS word: %.0f%% — use sparingly for emphasis\n", r.AllCapsWordsPct)
+	}
+	b.WriteString("\n")
+
+	// ── Power words ───────────────────────────────────────────────────────────
+	if len(r.PowerWords) > 0 {
+		words := make([]string, 0, 12)
+		for i, pw := range r.PowerWords {
+			if i >= 12 {
+				break
+			}
+			words = append(words, pw.Text)
+		}
+		fmt.Fprintf(&b, "### High-Frequency Power Words\n")
+		fmt.Fprintf(&b, "Use sparingly and only when natural: %s\n\n", strings.Join(words, ", "))
+	}
+
+	// ── Lead phrases & bigrams ────────────────────────────────────────────────
+	if len(r.LeadPhrases) > 0 {
+		fmt.Fprintf(&b, "### Common Opening Phrases (proven openers in this niche)\n")
+		for i, lp := range r.LeadPhrases {
+			if i >= 8 {
+				break
+			}
+			fmt.Fprintf(&b, "- \"%s\" (%.1f%%)\n", lp.Text, lp.Pct)
+		}
+		b.WriteString("\n")
+	}
+
+	if len(r.Bigrams) > 0 {
+		phrases := make([]string, 0, 8)
+		for i, bg := range r.Bigrams {
+			if i >= 8 {
+				break
+			}
+			phrases = append(phrases, "\""+bg.Text+"\"")
+		}
+		fmt.Fprintf(&b, "### Frequently Occurring Phrases\n")
+		fmt.Fprintf(&b, "These 2-word phrases resonate with this audience: %s\n\n", strings.Join(phrases, ", "))
+	}
+
+	// ── Topic clusters ────────────────────────────────────────────────────────
+	if len(r.TopicClusters) > 0 {
+		fmt.Fprintf(&b, "### Top Topic Clusters\n")
+		fmt.Fprintf(&b, "Stay within these domains for maximum relevance:\n")
+		for i, tc := range r.TopicClusters {
+			if i >= 5 || tc.Count == 0 {
+				break
+			}
+			fmt.Fprintf(&b, "- %s (%.1f%%)\n", tc.Text, tc.Pct)
+		}
+		b.WriteString("\n")
+	}
+
+	// ── Tone override ─────────────────────────────────────────────────────────
 	if opts.Tone != "" {
 		fmt.Fprintf(&b, "### Tone\nThe titles should feel: **%s**\n\n", opts.Tone)
 	}
@@ -148,6 +211,7 @@ Your titles must feel natural, authentic, and match the tone of content the user
 - Do NOT add explanations, intros, or commentary.
 - Do NOT use quotation marks around titles.
 - Keep each title under 100 characters.
+- Vary the templates across your suggestions — don't repeat the same structure.
 - Every title must be immediately usable on YouTube.
 `)
 
